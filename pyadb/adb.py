@@ -30,17 +30,14 @@ import time
 class ADB:
     def __init__(self):
         # make sure we have adb
-        if self._exec( "which adb" ) == "":
+        if self._exec( "adb version" ) == "":
             raise "ADB binary not found in PATH."
 
     def push( self, src, dst ):
-        self._exec( "adb push '%s' '%s' 2>&1 /dev/null" % ( src, dst ) )
+        self._exec( "adb push %s %s 2>&1 /dev/null" % ( src, dst ) )
 
     def sh( self, cmd ):
-        return self._exec( "adb shell '%s'" % cmd )
-
-    def sudo( self, cmd ):
-        return self.sh( "su -c \"%s\"" % cmd )
+        return self._exec( "adb shell %s" % cmd )
 
     def pkill( self, proc ):
         self.sudo( "pkill -9 %s" % proc )
@@ -53,18 +50,9 @@ class ADB:
         if level == 0:
             self.sh( 'su -c supolicy --live "allow s_untrusted_app shell_data_file file { execute execute_no_trans }"' )
 
-    def get_pid( self, proc ):
-        return int( self.sudo( "pidof %s" % proc ).strip() )
-
-    def start_activity( self, proc, activity ):
-        self.pkill( proc )
-        time.sleep(1)
-        self.sh( "am start %s/%s" % ( proc, activity ) )
-        return self.get_pid( proc )
-
     def logcat( self, tag = None ):
         if tag is not None:
-            cmd = "adb logcat -s '%s'" % tag
+            cmd = "adb logcat -s %s" % tag
         else:
             cmd = "adb logcat"
 

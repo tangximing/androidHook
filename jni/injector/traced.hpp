@@ -87,8 +87,13 @@ public:
         }
 
         while( fgets( buffer, sizeof(buffer), fp ) ) {
+            // judge the line whether contains the library
             if( strstr( buffer, library ) ){
-                address = (uintptr_t)strtoul( buffer, NULL, 16 );
+                char *pch = strtok( buffer, "-" );    
+                address = strtoul( pch, NULL, 16 );    
+    
+                if (address == 0x8000)    
+                    address = 0;    
                 goto done;
             }
         }
@@ -112,6 +117,7 @@ public:
         local_handle = findLibrary( library, getpid() );
         remote_handle = findLibrary( library );
 
+        printf("local and remote address of the library(%s): %x, %x, local function address: %x", library, local_handle, remote_handle, (uintptr_t)local_addr);
         return (void *)( (uintptr_t)local_addr + (uintptr_t)remote_handle - (uintptr_t)local_handle );
     }
 
@@ -228,7 +234,8 @@ public:
     // Remotely force the target process to dlopen a library.
     unsigned long dlopen( const char *libname ) {
         unsigned long pmem = copyString(libname);
-        unsigned long plib = call( _dlopen, 2, pmem, 0 );
+        printf("libname address: %lu\n", pmem);
+        unsigned long plib = call( _dlopen, 2, pmem, RTLD_LAZY);
 
         free(pmem);
 
@@ -280,6 +287,9 @@ public:
             else if( !_dlerror ){
                 fprintf( stderr, "Could not find dlerror symbol.\n" );
             }
+
+            printf("dlopen: %x\ndlsym: %x\ndlerror: %x\ncalloc: %x\nfree: %x\n",    
+            (uintptr_t)_dlopen, (uintptr_t)_dlsym, (uintptr_t)_dlerror, (uintptr_t)_calloc, (uintptr_t)_free);
         }
         else {
             fprintf( stderr, "Failed to attach to process %d.", _pid );

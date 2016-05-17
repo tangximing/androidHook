@@ -100,6 +100,9 @@ static Elf32_Sym *soinfo_gnu_lookup(struct soinfo *si, uint32_t hash, const char
     return NULL;
 }
 
+/**
+get the modules in the process
+**/
 ld_modules_t libhook_get_modules() {
     ld_modules_t modules;
     char buffer[1024] = {0};
@@ -156,7 +159,7 @@ unsigned libhook_addhook( const char *soname, const char *symbol, unsigned newva
     // since we know the module is already loaded and mostly
     // we DO NOT want its constructors to be called again,
     // ise RTLD_NOLOAD to just get its soinfo address.
-    si = (struct soinfo *)dlopen( soname, 4 /* RTLD_NOLOAD */ );
+    si = (struct soinfo *)dlopen( soname, RTLD_LAZY);
     if( !si ){
         HOOKLOG( "dlopen error: %s.", dlerror() );
         return 0;

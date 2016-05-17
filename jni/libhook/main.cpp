@@ -69,7 +69,7 @@ uintptr_t find_original( const char *name ) {
 
 void __attribute__ ((constructor)) libhook_main()
 {
-    HOOKLOG( "LIBRARY LOADED FROM PID %d.", getpid() );
+    HOOKLOG( "In the Libhook.so: \nLIBRARY LOADED FROM PID %d.", getpid() );
 
     // get a list of all loaded modules inside this process.
     ld_modules_t modules = libhook_get_modules();

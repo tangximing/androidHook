@@ -39,7 +39,7 @@
 #include "linker.h"
 
 #define HOOKLOG(F,...) \
-    __android_log_print( ANDROID_LOG_INFO, "LIBHOOK", F, __VA_ARGS__ )
+    __android_log_print( ANDROID_LOG_DEBUG, "LIBHOOK", F, __VA_ARGS__ )
 
 #define ORIGINAL( TYPENAME, ... ) \
     ((TYPENAME ## _t)find_original( #TYPENAME ))( __VA_ARGS__ )

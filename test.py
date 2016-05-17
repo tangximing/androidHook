@@ -29,27 +29,23 @@ from pyadb.adb import ADB
 try:
     adb = ADB()
 
-    process  = "com.android.chrome"
-    activity = "com.google.android.apps.chrome.Main"
+    print "@ Pushing files to /data/local/tmp/tang/ ..."
+    local_path = "libs\\armeabi-v7a\\"
+    remote_path = "/data/local/tmp/tang/"
 
-    print "@ Pushing files to /data/local/tmp ..."
+    adb.sh( "rm -rf /data/local/tmp/tang/injector /data/local/tmp/tang/libhook.so" )
+    adb.push( local_path + "injector",  remote_path + "injector" )
+    adb.push( local_path + "libhook.so", remote_path + "libhook.so" )
+    adb.sh( "chmod 777 /data/local/tmp/tang/injector" )
 
-    adb.sh( "rm -rf /data/local/tmp/injector /data/local/tmp/libhook.so" )
-    adb.push( "libs/armeabi-v7a/injector",  "/data/local/tmp/injector" )
-    adb.push( "libs/armeabi-v7a/libhook.so", "/data/local/tmp/libhook.so" )
-    adb.sh( "chmod 777 /data/local/tmp/injector" )
-
-    print "@ Starting %s/%s ..." % ( process, activity )
-
-    # we need to set selinux to permissive in order to make ptrace work
-    adb.set_selinux_level( 0 )
     adb.clear_log()
 
-    pid = adb.start_activity( process, activity )
+    # get the pid to inject
+    pid = input("pid: ");
 
     print "@ Injection into PID %d starting ..." % pid
 
-    adb.sudo( "/data/local/tmp/injector %d /data/local/tmp/libhook.so" % pid )
+    adb.sh( "/data/local/tmp/tang/injector %d /data/local/tmp/tang/libhook.so" % pid )
     adb.logcat("LIBHOOK")
 
 except KeyboardInterrupt:
