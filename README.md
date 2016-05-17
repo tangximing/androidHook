@@ -1,26 +1,18 @@
 ARM Inject
 ===
-
-An application to dynamically inject a shared object into a running process on
-ARM architectures and hook API calls.
-
-Read more on:
-
-- [Dynamically inject a shared library into a running process on Android/ARM](http://www.evilsocket.net/2015/05/01/dynamically-inject-a-shared-library-into-a-running-process-on-androidarm/).
-- [Android Native API Hooking with Library Injection and ELF Introspection](http://www.evilsocket.net/2015/05/04/android-native-api-hooking-with-library-injecto/)
+Reference: https://github.com/evilsocket/arminject
 
 ## How to Test
 
 In order to test this, you'll need the Android NDK installed and a device connected to your USB port,
 then simply run:
 
-    make test
+    1. ndk-build
+    2. python test.py, input the process name to inject
 
-This will launch a new Chrome browser instance and inject libhook into it. Once injected
-the library will hook the **open** function and print every call to it to the logcat.
 
-    @ Pushing files to /data/local/tmp ...
-    @ Starting com.android.chrome/com.google.android.apps.chrome.Main ...
+
+    @ Pushing files to /data/local/tmp/tang ....
     @ Injection into PID 18233 starting ...
 
     I/LIBHOOK (18233): LIBRARY LOADED FROM PID 18233.
@@ -75,15 +67,3 @@ the library will hook the **open** function and print every call to it to the lo
     ...
     ...
     @ CTRL+C detected, killing process ...
-
-## Note
-
-Most of the ELF manipulation code inside the file hook.cpp of libhook was taken from the **Andrey Petrov**'s
-blog post "[Android hacking: hooking system functions used by Dalvik](http://shadowwhowalks.blogspot.it/2013/01/android-hacking-hooking-system.html
-)" and fixed by me ( the original source code didn't work due to page align, memory protection, etc ).
-
-## License
-
-Released under the BSD license.  
-Copyright &copy; 2015, Simone Margaritelli <evilsocket@gmail.com>  
-All rights reserved.
