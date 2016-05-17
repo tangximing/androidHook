@@ -28,10 +28,55 @@
  */
 #include "traced.hpp"
 #include <string>
+#include <dirent.h>
+#include <android/log.h>
+
+#define HOOKLOG(F,...) \
+    __android_log_print( ANDROID_LOG_DEBUG, "LIBHOOK", F, __VA_ARGS__ )
 
 int usage( char *argvz ){
     printf( "Usage: %s <pid> <library>\n", argvz );
     return 1;
+}
+
+int find_pid_of(const char *process_name)    
+{    
+    int id;    
+    pid_t pid = -1;    
+    DIR* dir;    
+    FILE *fp;    
+    char filename[32];    
+    char cmdline[256];    
+    
+    struct dirent * entry;    
+    
+    if (process_name == NULL)    
+        return -1;    
+    
+    dir = opendir("/proc");    
+    if (dir == NULL)    
+        return -1;    
+    
+    while((entry = readdir(dir)) != NULL) {    
+        id = atoi(entry->d_name);    
+        if (id != 0) {    
+            sprintf(filename, "/proc/%d/cmdline", id);    
+            fp = fopen(filename, "r");    
+            if (fp) {    
+                fgets(cmdline, sizeof(cmdline), fp);    
+                fclose(fp);    
+    
+                if (strcmp(process_name, cmdline) == 0) {    
+                    /* process found */    
+                    pid = id;    
+                    break;    
+                }    
+            }    
+        }    
+    }    
+    
+    closedir(dir);    
+    return pid;    
 }
 
 int main( int argc, char **argv )
@@ -44,23 +89,24 @@ int main( int argc, char **argv )
         return 1;
     }
 
-    pid_t       pid     = atoi(argv[1]);
+    pid_t pid = find_pid_of(argv[1]);
     std::string library = argv[2];
 
-    if( pid == 0 ){
-        fprintf( stderr, "Invaid PID %s\n", argv[1] );
-        return 1;
+    HOOKLOG("@ process id: %d\n", pid);
+    if( pid == -1 ){
+        HOOKLOG("@ Invaid Process %s\n", argv[1] );
+        return -1;
     }
 
     Traced proc(pid);
 
-    printf( "@ Injecting library %s into process %d.\n\n", library.c_str(), pid );
+    HOOKLOG( "@ Injecting library %s into process %d.\n\n", library.c_str(), pid );
 
-    printf( "@ Calling dlopen in target process ...\n" );
+    HOOKLOG( "@ Calling dlopen in target process %d.\n", pid );
 
     unsigned long dlret = proc.dlopen( library.c_str() );
 
-    printf( "@ dlopen returned 0x%lX\n", dlret );
+    HOOKLOG( "@ dlopen returned 0x%lX\n", dlret );
 
     return 0;
 }

@@ -41,11 +41,11 @@ try:
     adb.clear_log()
 
     # get the pid to inject
-    pid = input("pid: ");
+    process = input("process: ");
 
-    print "@ Injection into PID %d starting ..." % pid
+    print "@ Injection into PID %s starting ..." % process
 
-    adb.sh( "/data/local/tmp/tang/injector %d /data/local/tmp/tang/libhook.so" % pid )
+    adb.sh( "/data/local/tmp/tang/injector %s /data/local/tmp/tang/libhook.so" % process )
     adb.logcat("LIBHOOK")
 
 except KeyboardInterrupt:
