@@ -34,7 +34,7 @@ class ADB:
             raise "ADB binary not found in PATH."
 
     def push( self, src, dst ):
-        self._exec( "adb push %s %s 2>&1 /dev/null" % ( src, dst ) )
+        self._exec( "adb push %s %s" % ( src, dst ) )
 
     def sh( self, cmd ):
         return self._exec( "adb shell %s" % cmd )
