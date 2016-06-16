@@ -27,11 +27,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include "hook.h"
+#include "hooks/communicate.hpp"
 #include "io.h"
 #include "report.h"
 #include <map>
 #include <sstream>
 #include <pthread.h>
+#include <string.h>
+#include <linux/binder.h>
 
 typedef std::map< int, std::string > fds_map_t;
 
@@ -42,6 +45,57 @@ static fds_map_t __descriptors;
 #define UNLOCK() pthread_mutex_unlock(&__lock)
 
 extern uintptr_t find_original( const char *name );
+
+Communication* communication = Communication::getInstance();
+
+string getNameByPid(pid_t pid) {
+    char proc_pid_path[1024];
+    char buf[1024];
+    string name = "";
+
+    sprintf(proc_pid_path, "/proc/%d/status", pid);
+    FILE* fp = fopen(proc_pid_path, "r");
+    if(NULL != fp){
+        if( fgets(buf, 1023, fp) != NULL ){
+            name = strrchr( buf, ':' ) + 1;
+        }
+        fclose(fp);
+    }
+    
+    HOOKLOG("application name: %s", name.c_str());
+    return name;
+}
+
+char* hexdump(const void *_data, unsigned len)
+{
+    unsigned char *data = (unsigned char *)_data;
+    char *dataAry = (char*)malloc(len*(sizeof(char)));
+    char *dataTmp = dataAry;
+    unsigned count;
+    for (count = 0; count < len; count++) 
+    {
+        //HOOKLOG("%d: %c", *data, *data);
+        // control char
+        if((*data >= 1) && (*data <= 31))
+        {
+            if(count > 0 && *(dataAry - 1) != ':')
+            {
+                *dataAry = ':';
+                dataAry++;
+            }
+        }
+        // number, char, .
+        if(((*data >= 48) && (*data <= 57)) || ((*data >= 65) && (*data <= 90)) || ((*data >= 97) && (*data <= 122)) || (*data == 46))
+        {
+            //HOOKLOG("%c", *data);
+            *dataAry = *data;
+            dataAry++;  
+        }
+        data++;
+    }
+    *dataAry = '\0';
+    return dataTmp;
+}
 
 void io_add_descriptor( int fd, const char *name ) {
     LOCK();
@@ -92,6 +146,78 @@ std::string io_resolve_descriptor( int fd ) {
     return name;
 }
 
+/**
+ioctl
+*/
+DEFINEHOOK( int, ioctl, (int fd, unsigned long int request, void *arg) ){
+    int res = ORIGINAL(ioctl, fd, request, arg);
+    if ( request == BINDER_WRITE_READ )
+    {
+      struct binder_write_read* tmp = (struct binder_write_read*) arg;
+      signed long write_size = tmp->write_size;
+      signed long read_size = tmp->read_size;
+
+      if(write_size > 0)
+      {
+          int already_got_size = 0;
+          unsigned long *pcmd = 0;
+          
+          while(already_got_size < write_size)
+          {
+            pcmd = (unsigned long *)(tmp->write_buffer + already_got_size);
+            int code = pcmd[0];
+            int size =  _IOC_SIZE(code);
+
+            struct binder_transaction_data* pdata = (struct binder_transaction_data*)(&pcmd[1]);
+            switch (code)
+            {
+              case BC_TRANSACTION:
+                {
+                    char * pname = hexdump(pdata->data.ptr.buffer, pdata->data_size);
+                    HOOKLOG("BC_TRANSACTION: %s, code: %d", pname, pdata->code);
+                }
+                break;
+            }
+            already_got_size += (size + 4);
+          }
+      }
+      if(read_size > 0)
+      {
+          int already_got_size = 0;
+          unsigned long *pret = 0;
+          
+          while(already_got_size < read_size)
+          {
+            pret = (unsigned long *)(tmp->read_buffer + already_got_size);
+            int code = pret[0];
+            int size =  _IOC_SIZE(code);
+
+            struct binder_transaction_data* pdata = (struct binder_transaction_data*)(&pret[1]);
+            switch (code)
+            {
+              /*case BR_TRANSACTION:
+                {
+                    char * pname = hexdump(pdata->data.ptr.buffer, pdata->data_size);
+                    HOOKLOG("BR_TRANSACTION: %s", pname);
+                }
+                break;*/
+              case BR_REPLY:
+                {
+                    char * pname = hexdump(pdata->data.ptr.buffer, pdata->data_size);
+                    HOOKLOG("BR_REPLY: %s", (unsigned char *)pname);
+                }
+                break;
+            }
+            already_got_size += (size + 4);//数据内容加上命令码
+          }
+      }
+    }
+    return res;
+}
+
+/**
+open
+*/
 DEFINEHOOK( int, open, (const char *pathname, int flags) ) {
     int fd = ORIGINAL( open, pathname, flags );
 
@@ -103,6 +229,12 @@ DEFINEHOOK( int, open, (const char *pathname, int flags) ) {
         "pathname", pathname,
         "flags", flags,
         fd );
+
+    ostringstream s;
+    string application = getNameByPid(getpid());
+    s << application << ";open;" << pathname;
+
+    communication->sendData(s.str());
 
     return fd;
 }
@@ -146,28 +278,23 @@ DEFINEHOOK( int, close, (int fd) ) {
 
 DEFINEHOOK( int, connect, (int sockfd, const struct sockaddr *addr, socklen_t addrlen) ) {
     int ret = ORIGINAL( connect, sockfd, addr, addrlen );
-
-    struct sockaddr_in *addr_in = (struct sockaddr_in *)addr;
-    std::ostringstream s;
-
-    if( addr_in->sin_family == 1 ){
-        struct sockaddr_un *sun = (struct sockaddr_un *)addr;
-
-        s << "unix://" << sun->sun_path;
+    
+    union sockaddr_all{
+        struct sockaddr s;
+        struct sockaddr_in v4;
+        struct sockaddr_in6 v6;
+    }u;
+    u = *((union sockaddr_all *)addr);
+    char ip[100];
+    unsigned int port = 0;
+    if(addr->sa_family == AF_INET){
+        port = ntohs(u.v4.sin_port);
+        inet_ntop(addr->sa_family , &u.v4.sin_addr, ip, sizeof(ip));
+    }else if(addr->sa_family == AF_INET6){
+        port = ntohs(u.v6.sin6_port);
+        inet_ntop(addr->sa_family , &u.v6.sin6_addr, ip, sizeof(ip));
     }
-    else {
-        s << "ip://" << inet_ntoa(addr_in->sin_addr);
-    }
-
-    if( ret == 0 ){
-        io_add_descriptor( sockfd, s.str().c_str() );
-    }
-
-    report_add( "connect", "spd.i",
-        "sockfd", io_resolve_descriptor(sockfd).c_str(),
-        "addr", addr,
-        "addrlen", addrlen,
-        ret );
+    HOOKLOG("ip: %s, port: %d", ip, port);
 
     return ret;
 }

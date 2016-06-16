@@ -34,6 +34,7 @@
 #include "hook.h"
 #include <sys/mman.h>
 
+extern ld_modules_t modules;
 
 static unsigned elfhash(const char *_name) {
    const unsigned char *name = (const unsigned char *) _name;
@@ -100,10 +101,7 @@ static Elf32_Sym *soinfo_gnu_lookup(struct soinfo *si, uint32_t hash, const char
     return NULL;
 }
 
-/**
-get the modules in the process
-**/
-ld_modules_t libhook_get_modules() {
+ld_modules_t libhook_definehooks() {
     ld_modules_t modules;
     char buffer[1024] = {0};
     uintptr_t address;
@@ -117,11 +115,14 @@ ld_modules_t libhook_get_modules() {
 
     while( fgets( buffer, sizeof(buffer), fp ) ) {
         if( strstr( buffer, "r-xp" ) ){
+            // string to unsigned long
             address = (uintptr_t)strtoul( buffer, NULL, 16 );
             name    = strrchr( buffer, ' ' ) + 1;
             name.resize( name.size() - 1 );
 
-            modules.push_back( ld_module_t( address, name ) );
+            if(name == "/system/lib/libjavacore.so"){
+                modules.push_back(ld_module_t(address, name));
+            }
         }
     }
 

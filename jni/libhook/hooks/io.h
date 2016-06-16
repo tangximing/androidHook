@@ -48,4 +48,6 @@ ssize_t hook_recvfrom(int sockfd, const void *buf, size_t len, int flags, const 
 ssize_t hook_recvmsg(int sockfd, const struct msghdr *msg, int flags);
 int hook_shutdown(int sockfd, int how);
 
+int hook_ioctl(int fd, unsigned long int request, void *arg);
+
 #endif

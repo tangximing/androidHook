@@ -1,0 +1,39 @@
+一
+发送短信：
+com.android.internal.telephony.ISms + 包名 + 电话名 + 短信内容
+com.android.internal.telephony.ISmscom.tang.target13262273797Tedgybde
+:com.android.internal.telephony.ISms:com.tang.target:13262273797:Dybdd
+
+
+二
+查看联系人：
+android.content.IContentProvider com.tang.target content com.android.contacts com.android.contacts data phone sbsttbs, code: 1
+android.content.IContentProvider com.tang.target content com.android.contacts com.android.contacts data phone sbsdtdtbs, code: 1
+
+:android.content.IContentProvider:com.tang.target:content:com.android.contacts:com.android.contacts:dataphonesbs:Xt8tbs:, code: 1
+
+查看通话记录：
+android.content.IContentProvider com.tang.target content calllogcallsbsytytbs, code: 1
+android.content.IContentProvider com.tang.target content calllogcallsbsxxthtbs, code: 1
+
+:android.content.IContentProvider:com.tang.target:contentcalllogcallsbs:HWLtWLtbs:, code: 1
+
+查看短信：
+android.content.IContentProvider com.tang.target content sms bsttbs, code: 1
+android.content.IContentProvider com.tang.target content sms bsytytbs, code: 1
+
+:android.content.IContentProvider:com.tang.target:contentsmsbs:pdttbs:, code: 1
+
+查看IMEI：
+com.android.internal.telephony.IPhoneSubInfo, code: 1
+:com.android.internal.telephony.IPhoneSubInfo, code: 1
+
+查看IMSI:
+com.android.internal.telephony.IPhoneSubInfo, code: 5
+
+查看电话号码：
+com.android.internal.telephony.IPhoneSubInfo, code: 8
+
+获取location：
+网络：android.location.ILocationManagernetworkbsytxt com.tang.target, code: 1
+GPS：android.location.ILocationManagerdgpsbsdtdt com.tang.target, code: 1
