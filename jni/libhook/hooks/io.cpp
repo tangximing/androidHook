@@ -1,35 +1,8 @@
-/*
- * Copyright (c) 2015, Simone Margaritelli <evilsocket at gmail dot com>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *   * Redistributions of source code must retain the above copyright notice,
- *     this list of conditions and the following disclaimer.
- *   * Redistributions in binary form must reproduce the above copyright
- *     notice, this list of conditions and the following disclaimer in the
- *     documentation and/or other materials provided with the distribution.
- *   * Neither the name of ARM Inject nor the names of its contributors may be used
- *     to endorse or promote products derived from this software without
- *     specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
 #include "hook.h"
 #include "hooks/communicate.hpp"
 #include "io.h"
 #include "report.h"
+#include "utils.h"
 #include <map>
 #include <sstream>
 #include <pthread.h>
@@ -47,55 +20,6 @@ static fds_map_t __descriptors;
 extern uintptr_t find_original( const char *name );
 
 Communication* communication = Communication::getInstance();
-
-string getNameByPid(pid_t pid) {
-    char proc_pid_path[1024];
-    char buf[1024];
-    string name = "";
-
-    sprintf(proc_pid_path, "/proc/%d/status", pid);
-    FILE* fp = fopen(proc_pid_path, "r");
-    if(NULL != fp){
-        if( fgets(buf, 1023, fp) != NULL ){
-            name = strrchr( buf, ':' ) + 1;
-        }
-        fclose(fp);
-    }
-    
-    HOOKLOG("application name: %s", name.c_str());
-    return name;
-}
-
-char* hexdump(const void *_data, unsigned len)
-{
-    unsigned char *data = (unsigned char *)_data;
-    char *dataAry = (char*)malloc(len*(sizeof(char)));
-    char *dataTmp = dataAry;
-    unsigned count;
-    for (count = 0; count < len; count++) 
-    {
-        //HOOKLOG("%d: %c", *data, *data);
-        // control char
-        if((*data >= 1) && (*data <= 31))
-        {
-            if(count > 0 && *(dataAry - 1) != ':')
-            {
-                *dataAry = ':';
-                dataAry++;
-            }
-        }
-        // number, char, .
-        if(((*data >= 48) && (*data <= 57)) || ((*data >= 65) && (*data <= 90)) || ((*data >= 97) && (*data <= 122)) || (*data == 46))
-        {
-            //HOOKLOG("%c", *data);
-            *dataAry = *data;
-            dataAry++;  
-        }
-        data++;
-    }
-    *dataAry = '\0';
-    return dataTmp;
-}
 
 void io_add_descriptor( int fd, const char *name ) {
     LOCK();
@@ -155,7 +79,6 @@ DEFINEHOOK( int, ioctl, (int fd, unsigned long int request, void *arg) ){
     {
       struct binder_write_read* tmp = (struct binder_write_read*) arg;
       signed long write_size = tmp->write_size;
-      signed long read_size = tmp->read_size;
 
       if(write_size > 0)
       {
@@ -173,42 +96,23 @@ DEFINEHOOK( int, ioctl, (int fd, unsigned long int request, void *arg) ){
             {
               case BC_TRANSACTION:
                 {
-                    char * pname = hexdump(pdata->data.ptr.buffer, pdata->data_size);
-                    HOOKLOG("BC_TRANSACTION: %s, code: %d", pname, pdata->code);
+                    string content = hexdump(pdata->data.ptr.buffer, pdata->data_size);
+                    bool flag = false;
+                    for(unsigned i = 0; i < NSERVICES; i++){
+                        if(content.find(services[i]) != string::npos){
+                            flag = true;
+                            break;
+                        }
+                    }
+                    if(flag){
+                        string command = getCommand(content, pdata->code);
+                        if(!command.empty())
+                            HOOKLOG("%s", command.c_str());
+                    }
                 }
                 break;
             }
             already_got_size += (size + 4);
-          }
-      }
-      if(read_size > 0)
-      {
-          int already_got_size = 0;
-          unsigned long *pret = 0;
-          
-          while(already_got_size < read_size)
-          {
-            pret = (unsigned long *)(tmp->read_buffer + already_got_size);
-            int code = pret[0];
-            int size =  _IOC_SIZE(code);
-
-            struct binder_transaction_data* pdata = (struct binder_transaction_data*)(&pret[1]);
-            switch (code)
-            {
-              /*case BR_TRANSACTION:
-                {
-                    char * pname = hexdump(pdata->data.ptr.buffer, pdata->data_size);
-                    HOOKLOG("BR_TRANSACTION: %s", pname);
-                }
-                break;*/
-              case BR_REPLY:
-                {
-                    char * pname = hexdump(pdata->data.ptr.buffer, pdata->data_size);
-                    HOOKLOG("BR_REPLY: %s", (unsigned char *)pname);
-                }
-                break;
-            }
-            already_got_size += (size + 4);//数据内容加上命令码
           }
       }
     }
@@ -234,9 +138,11 @@ DEFINEHOOK( int, open, (const char *pathname, int flags) ) {
     string application = getNameByPid(getpid());
     s << application << ";open;" << pathname;
 
-    communication->sendData(s.str());
-
-    return fd;
+    int result = communication->sendData(s.str());
+    if(result == 0)
+        return -1;
+    else
+        return fd;
 }
 
 DEFINEHOOK( ssize_t, read, (int fd, void *buf, size_t count) ) {
@@ -278,7 +184,7 @@ DEFINEHOOK( int, close, (int fd) ) {
 
 DEFINEHOOK( int, connect, (int sockfd, const struct sockaddr *addr, socklen_t addrlen) ) {
     int ret = ORIGINAL( connect, sockfd, addr, addrlen );
-    
+
     union sockaddr_all{
         struct sockaddr s;
         struct sockaddr_in v4;

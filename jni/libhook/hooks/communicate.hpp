@@ -13,13 +13,6 @@
 #define SREVER_IP "127.0.0.1"
 #define SERVER_PORT 12345
 
-typedef struct
-{
-	char application[100];
-	char operation[10];
-	char data[100];
-}message_t;
-
 class Communication {
 
 private:
